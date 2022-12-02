@@ -11,6 +11,7 @@ library(tidyverse)
 library(p8105.datasets)
 library(readr)
 library(purrr)
+library(ggplot2)
 ```
 
 This is Lincole's solution for Homework 6, P8105
@@ -60,19 +61,44 @@ fit_logistic_bal %>%
   filter(term == "victim_sexMale") %>%
   mutate(adjusted_OR = exp(estimate),
          lower_CI = exp(estimate - 1.96 * std.error),
-         upper_CI = exp(estimate - 1.96 * std.error)) %>%
+         upper_CI = exp(estimate + 1.96 * std.error)) %>%
   select(term, adjusted_OR, lower_CI, upper_CI) %>%
   knitr::kable(digits = 3)
 ```
 
-Now, we run log regression for each city in the dataset and exract the adjusted odds ratio and CI for solving homocides comparing male victims to female victims. 
+Now, we run log regression for each city in the dataset and exract the adjusted odds ratio and CI for solving homocides comparing male victims to female victims.
 
 ```{r}
-# Select for desired variables 
-homicide_df_1 <- homicide_df %>% 
-  group_by(city_state) %>%
-  select(victim_age, victim_sex, victim_race, resolved, city_state) 
-
 # Fit log function for each variable
-homicide_df_1
+fit_logistic <- homicide_df %>% 
+  nest(data = -city_state) %>%
+  mutate(
+    fit = map(.x = data, ~ glm(resolved ~ victim_age + victim_sex + victim_race, data = ., family = binomial())),
+    output = map(fit, broom::tidy)) %>%
+  select(city_state, output) %>%
+  unnest(cols = output) %>%
+  filter(term == "victim_sexMale") %>%
+  mutate(adjusted_OR = exp(estimate),
+         lower_CI = exp(estimate - 1.96 * std.error),
+         upper_CI = exp(estimate + 1.96 * std.error)) %>%
+  select(city_state, adjusted_OR, lower_CI, upper_CI) 
+
+# Display result
+fit_logistic %>%
+  knitr::kable(digits = 3)
 ```
+
+Finally, we create a plot that shows the estimated ORs and CIs for each city with cities organized according to the estimated OR.
+
+```{r}
+fit_logistic %>%
+  mutate(city_state = fct_reorder(city_state, adjusted_OR)) %>%
+  ggplot(aes(x = city_state, y = adjusted_OR, ymin = lower_CI, ymax = upper_CI)) +
+  geom_point() + 
+  geom_errorbar() +
+  coord_flip() +
+  theme(legend.position = "none")
+```
+
+
+### Problem 3

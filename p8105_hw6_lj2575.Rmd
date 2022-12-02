@@ -10,7 +10,69 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(p8105.datasets)
 library(readr)
+library(purrr)
 ```
 
 This is Lincole's solution for Homework 6, P8105
 
+
+### Problem 0
+
+This problem stresses the adherence to the standards of this course regarding repo structure, git commit history, and reproducibility.
+
+
+### Problem 1
+
+*omitted*
+
+
+### Problem 2
+
+For this problem, we use the dataset gathered by *The Washington Post* on homocides in 50 large U.S. cities. In the first step of data wrangling, we create a city_state variable (e.g., Baltimore, MD) and a binary variable indicating whether the homocide is solved while omitting rows in which the city states that don't report victim race, i.e., Dallas, TX; Phoenix, AZ; and Kansas City, MO. Moreover, we limit our analysis such that victim_race is either black or white. Finally, we make sure that victim_age is numeric.
+
+```{r}
+homicide_df <- read_csv("./data/homicide-data.csv") %>%
+  mutate(city_state = paste(city, state, sep = ", "),
+         victim_age = as.numeric(victim_age),
+         resolved = as.numeric(disposition == "Closed by arrest")) %>%
+  filter(city_state != "Dallas, TX" & 
+           city_state != "Phoenix, AZ" & 
+           city_state != "Kansas City, MO" &
+           city_state != "Tulsa, AL" & 
+           (victim_race == "White" | 
+              victim_race == "Black"))
+```
+
+Now, for the city of Baltimore, MD, we fit a logistic regression with resolved vs. unsolved as the outcome and victim age, sex, and race as predictors. Then, comparing male victims to female victims and keeping all other variables fix, we obtain the estimate and confidence interval of the adjusted odds ratio for solving homocides.
+
+```{r}
+baltimore_df <- homicide_df %>% 
+  filter(city_state == "Baltimore, MD") %>%
+  select(victim_age, victim_sex, victim_race, resolved)
+
+fit_logistic_bal = baltimore_df %>%
+  glm(resolved ~ victim_age + victim_sex + victim_race, data = ., 
+      family = binomial()) 
+
+# Display the estimate and confidence interval of the adjusted odds ratio comparing male to female.
+fit_logistic_bal %>% 
+  broom::tidy() %>%
+  filter(term == "victim_sexMale") %>%
+  mutate(adjusted_OR = exp(estimate),
+         lower_CI = exp(estimate - 1.96 * std.error),
+         upper_CI = exp(estimate - 1.96 * std.error)) %>%
+  select(term, adjusted_OR, lower_CI, upper_CI) %>%
+  knitr::kable(digits = 3)
+```
+
+Now, we run log regression for each city in the dataset and exract the adjusted odds ratio and CI for solving homocides comparing male victims to female victims. 
+
+```{r}
+# Select for desired variables 
+homicide_df_1 <- homicide_df %>% 
+  group_by(city_state) %>%
+  select(victim_age, victim_sex, victim_race, resolved, city_state) 
+
+# Fit log function for each variable
+homicide_df_1
+```

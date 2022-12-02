@@ -1,0 +1,16 @@
+---
+title: "Homework 6"
+author: "Lincole Jiang"
+date: "`r Sys.Date()`"
+output: git_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(p8105.datasets)
+library(readr)
+```
+
+This is Lincole's solution for Homework 6, P8105
+

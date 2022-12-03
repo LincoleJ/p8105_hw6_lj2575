@@ -2,7 +2,7 @@
 title: "Homework 6"
 author: "Lincole Jiang"
 date: "`r Sys.Date()`"
-output: git_document
+output: github_document
 ---
 
 ```{r setup, include=FALSE}
@@ -12,6 +12,7 @@ library(p8105.datasets)
 library(readr)
 library(purrr)
 library(ggplot2)
+library(modelr)
 ```
 
 This is Lincole's solution for Homework 6, P8105
@@ -102,3 +103,80 @@ fit_logistic %>%
 
 
 ### Problem 3
+
+In this problem, we analyze the potential effects on a child's birthweight using a dataset consisted roughly of 4000 children. We first load and clean the data to set it up for regression analysis. Specifically, we change variable sex of baby, father's race, and mother's race into factor variables.
+
+```{r}
+birthweight_df <- read_csv("./data/birthweight.csv") %>% 
+  mutate(babysex = as.factor(case_when(babysex == 1 ~ "male",
+                                       babysex == 2 ~ "female")),
+         frace = as.factor(case_when(frace == 1 ~ "White",
+                                     frace == 2 ~ "Black",
+                                     frace == 3 ~ "Asian",
+                                     frace == 4 ~ "Puerto Rican",
+                                     frace == 8 ~ "Other",
+                                     frace == 9 ~ "Uknown")),
+         mrace = as.factor(case_when(frace == 1 ~ "White",
+                                     frace == 2 ~ "Black",
+                                     frace == 3 ~ "Asian",
+                                     frace == 4 ~ "Puerto Rican",
+                                     frace == 8 ~ "Other")))
+```
+
+Now, we propose a model of based on hypothesis testing. To build my own model, I want to look at the factors that affect pregnancy and whether these factors play roles in determining the birthweight of the baby; namely, family monthly income, average number of cigarettes smoked per day during pregnancy, and mother's weight gain during pregnancy and all interactions. We then plot the model residuals against fitted values.
+
+```{r}
+# Fit regression model
+fit_1 = birthweight_df %>% lm(bwt ~ fincome * smoken * wtgain, data = .)
+
+# Plot model residuals against fitted values
+birthweight_df %>% 
+  add_predictions(fit_1) %>%
+  add_residuals(fit_1) %>% 
+  ggplot(aes(x = pred, y = resid)) +
+  geom_point()
+```
+
+We can clearly see from this residual vs. fited plot that:
+1. The residuals do not bounce randomly around the 0 line but concentrate around when fitted value = 3100, suggesting that linearity is not a reasonable hypothesis;
+2. The residuals roughly form a "horizontal band" around the 0 line, suggesting that the variances of error terms are equal;
+3. There are several outliers in the plot.
+
+Next, we build the other two models by which we compare our model: one using length at birth and gestational age as predictors considering only main effects; and the other one using head circumference, length, sex, all interactions including the three-way interaction between these three explanatory variables. We then make the comparison in terms of the cross-validated prediction error.
+
+```{r}
+cv_df <- crossv_mc(birthweight_df, n = 100) %>%
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)) %>% 
+  mutate(
+    fit_1 = map(train, ~lm(bwt ~ fincome * smoken * wtgain, data = .x)),
+    fit_2 = map(train, ~lm(bwt ~ blength + gaweeks, data = .x)),
+    fit_3 = map(train, ~lm(bwt ~ bhead * blength * babysex, data = .x))
+  ) %>%
+  mutate(
+    rmse_fit_1 = map2_dbl(fit_1, test, ~rmse(model = .x, data = .y)),
+    rmse_fit_2 = map2_dbl(fit_2, test, ~rmse(model = .x, data = .y)),
+    rmse_fit_3 = map2_dbl(fit_3, test, ~rmse(model = .x, data = .y))
+  )
+
+# Display RMSE results
+cv_df %>% 
+  summarise(fit1_mean_error = mean(rmse_fit_1),
+            fit2_mean_error = mean(rmse_fit_2),
+            fit3_mean_error = mean(rmse_fit_3)) %>%
+  knitr::kable(digits = 3)
+
+# Show the distribution of RMSEs using violin plots
+cv_df %>%
+  select(starts_with("rmse")) %>%
+  pivot_longer(
+    everything(),
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse") %>%
+  mutate(model = fct_inorder(model)) %>%
+  ggplot(aes(x = model, y = rmse)) + 
+  geom_violin()
+```
+
